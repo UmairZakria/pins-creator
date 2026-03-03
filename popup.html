@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Pinterest Auto Pin</title>
+    <style>
+      body {
+        width: 320px;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 0;
+        padding: 15px;
+        background-color: #f9f9f9;
+        color: #333;
+      }
+      h2 {
+        font-size: 18px;
+        margin-top: 0;
+        color: #e60023; /* Pinterest Red */
+        text-align: center;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .status-box {
+        background-color: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 10px;
+        font-size: 13px;
+      }
+      .stat-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 5px;
+      }
+      .stat-label {
+        color: #666;
+      }
+      .stat-value {
+        font-weight: bold;
+      }
+      .btn {
+        background-color: #e60023;
+        color: white;
+        border: none;
+        padding: 10px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-weight: bold;
+        font-size: 14px;
+        transition: background-color 0.2s;
+      }
+      .btn:hover {
+        background-color: #ad081b;
+      }
+      .btn:disabled {
+        background-color: #ccc;
+        cursor: not-allowed;
+      }
+      .btn-stop {
+        background-color: #555;
+      }
+      .btn-stop:hover {
+        background-color: #333;
+      }
+      input[type="file"] {
+        display: none;
+      }
+      .file-label {
+        border: 2px dashed #ccc;
+        padding: 20px;
+        text-align: center;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: border-color 0.2s;
+      }
+      .file-label:hover {
+        border-color: #e60023;
+      }
+      #countdown {
+        font-size: 24px;
+        text-align: center;
+        font-weight: bold;
+        margin: 10px 0;
+        color: #e60023;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>Auto Pin Creator</h2>
+    <div class="container">
+      <label for="excel-upload" class="file-label" id="drop-zone">
+        <span>Click to upload Pin Data (.xlsx)</span>
+        <input type="file" id="excel-upload" accept=".xlsx" />
+      </label>
+
+      <div class="status-box">
+        <div class="stat-row">
+          <span class="stat-label">Pins in Queue:</span>
+          <span class="stat-value" id="pins-remaining">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Last Posted:</span>
+          <span class="stat-value" id="last-posted">Never</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Status:</span>
+          <span class="stat-value" id="current-status">Idle</span>
+        </div>
+      </div>
+
+      <div id="countdown-container" style="display: none">
+        <div style="text-align: center; color: #666; font-size: 12px">
+          Next post in:
+        </div>
+        <div id="countdown">00:00:00</div>
+      </div>
+
+      <button id="start-btn" class="btn" disabled>Start Automation</button>
+      <button id="stop-btn" class="btn btn-stop" style="display: none">
+        Stop Automation
+      </button>
+    </div>
+
+    <!-- SheetJS for Excel Parsing -->
+    <script src="libs/xlsx.full.min.js"></script>
+    <script src="excelReader.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
