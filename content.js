@@ -11,9 +11,9 @@ const SELECTORS = {
   linkInput:
     '[data-test-id="pin-builder-link"] input, [placeholder*="Add a destination link"], [aria-label*="destination link"]',
   boardDropdown:
-    '[data-test-id="board-dropdown-select-button"], [data-test-id="board-selection-select"], [aria-label*="Select a board"]',
+    '[data-test-id="board-dropdown-select-button"], [data-test-id="board-selection-select"], [aria-label*="Select a board"], .board-selection-select-button',
   boardSearch:
-    '[data-test-id="board-dropdown-search-field"] input, [data-test-id="board-picker-search-field"] input, [placeholder*="Search for a board"], .board-picker-search-input',
+    '#pickerSearchField, [data-test-id="board-dropdown-search-field"] input, [data-test-id="board-picker-search-field"] input, [placeholder*="Search for a board"], .board-picker-search-input, input[role="searchbox"], [aria-label*="Search through your boards"]',
   boardRow:
     '[role="listitem"], [data-test-id="board-row"], .board-row-selection',
   publishLaterRadio: '[data-test-id="publish-later-radio"]',
@@ -26,6 +26,12 @@ const SELECTORS = {
   genericPublish: 'button[type="submit"]',
   saveSuccessMessage:
     '[data-test-id="save-success-message"], .toast-success, [aria-label*="Saved"]',
+  createBoardBtn:
+    '[data-test-id="create-board-button"], [data-test-id="create-board"], [role="button"][title*="Create board"]',
+  createBoardModal:
+    '[data-test-id="create-board-modal"], [role="dialog"], .modal-container',
+  createBoardSubmitBtn:
+    '[data-test-id="create-board-submit-button"], button[type="submit"], button.create-board-confirm',
 };
 
 /**
@@ -172,15 +178,19 @@ async function automatePin() {
         `Current board is "${currentBoard}", switching to "${pin.board}"...`,
       );
       // Multi-click retry strategy for stubborn React components
+      console.log("Attempting to open dropdown...");
       await humanClick(boardBtn);
-      await humanBehavior.wait(1000, 2000);
+      await humanBehavior.wait(1500, 2500);
 
       let boardSearch = document.querySelector(SELECTORS.boardSearch);
       if (!boardSearch) {
-        console.log("Search field not found, retrying click...");
-        await humanClick(boardBtn);
-        await humanBehavior.wait(1000, 2000);
-        boardSearch = document.querySelector(SELECTORS.boardSearch);
+        console.log("Search field not found, trying parent click...");
+        const parentBtn = boardBtn.closest("button") || boardBtn.parentElement;
+        if (parentBtn) {
+          await humanClick(parentBtn);
+          await humanBehavior.wait(1500, 2500);
+          boardSearch = document.querySelector(SELECTORS.boardSearch);
+        }
       }
 
       if (!boardSearch) {
@@ -190,48 +200,219 @@ async function automatePin() {
         boardSearch = Array.from(document.querySelectorAll("input")).find(
           (el) =>
             el.placeholder?.toLowerCase().includes("search") ||
-            el.getAttribute("aria-label")?.toLowerCase().includes("board"),
-        );
-      }
-
-      if (!boardSearch) {
-        scoutDOM();
-        throw new Error("Could not find board search field.");
-      }
-
-      await humanBehavior.simulateMovement(boardSearch);
-      await humanBehavior.typeSlowly(boardSearch, pin.board);
-      await humanBehavior.wait(2000, 3000);
-
-      // Find the board in the list
-      console.log("Searching for board in results list...");
-      let boardOptions = document.querySelectorAll(SELECTORS.boardRow);
-      if (boardOptions.length === 0) {
-        boardOptions = Array.from(
-          document.querySelectorAll('div, [role="listitem"]'),
-        ).filter((el) =>
-          el.innerText?.toLowerCase().includes(pin.board.toLowerCase()),
+            el.getAttribute("aria-label")?.toLowerCase().includes("board") ||
+            el.getAttribute("role") === "searchbox",
         );
       }
 
       let found = false;
-      for (const opt of boardOptions) {
-        if (opt.innerText?.toLowerCase().includes(pin.board.toLowerCase())) {
-          console.log(`Found matching board row, clicking...`);
+
+      if (!boardSearch) {
+        console.warn(
+          "Could not find board search field. Attempting direct selection/creation from visible elements...",
+        );
+
+        // Fallback 1: Is the board already in the list?
+        const boardOptions = Array.from(
+          document.querySelectorAll('div, [role="listitem"], [role="option"]'),
+        ).filter((el) =>
+          el.innerText?.toLowerCase().includes(pin.board.toLowerCase()),
+        );
+
+        for (const opt of boardOptions) {
+          console.log(`Found matching board row directly, clicking...`);
           await humanClick(opt);
           found = true;
           break;
         }
-      }
 
-      if (!found && boardOptions.length > 0) {
-        await humanClick(boardOptions[0]);
-        found = true;
+        if (!found) {
+          // Fallback 2: Try to find "Create board" directly
+          let createBtn = document.querySelector(SELECTORS.createBoardBtn);
+          if (!createBtn) {
+            createBtn = Array.from(
+              document.querySelectorAll('div, button, [role="button"]'),
+            ).find(
+              (el) =>
+                (el.innerText?.toLowerCase().includes("create board") ||
+                  el.title?.toLowerCase().includes("create board") ||
+                  el
+                    .getAttribute("aria-label")
+                    ?.toLowerCase()
+                    .includes("create board")) &&
+                el.getBoundingClientRect().height > 0,
+            );
+          }
+
+          if (createBtn) {
+            console.log(
+              "Found 'Create board' button directly, clicking...",
+              createBtn.tagName,
+              createBtn.className,
+            );
+            await humanClick(createBtn);
+            await humanBehavior.wait(2000, 3000);
+
+            // Handle modal if it appears
+            const modal = document.querySelector(SELECTORS.createBoardModal);
+            if (modal) {
+              const submitBtn =
+                modal.querySelector(SELECTORS.createBoardSubmitBtn) ||
+                document.querySelector(SELECTORS.createBoardSubmitBtn);
+              if (submitBtn) {
+                await humanClick(submitBtn);
+                await humanBehavior.wait(3000, 5000);
+                found = true;
+                console.log(`Board "${pin.board}" creation submitted.`);
+              }
+            } else {
+              console.log(
+                "No modal detected, assuming board creation/selection.",
+              );
+              found = true;
+            }
+          }
+        }
+
+        if (!found) {
+          scoutDOM();
+          throw new Error(
+            "Board search field missing and direct selection/creation failed.",
+          );
+        }
+      } else {
+        // Normal Search Flow
+        await humanBehavior.simulateMovement(boardSearch);
+        await humanBehavior.typeSlowly(boardSearch, pin.board);
+        await humanBehavior.wait(2000, 3000);
+
+        // Find the board in the list
+        console.log("Searching for board in results list...");
+        let boardOptions = document.querySelectorAll(SELECTORS.boardRow);
+        if (boardOptions.length === 0) {
+          boardOptions = Array.from(
+            document.querySelectorAll('div, [role="listitem"]'),
+          ).filter((el) =>
+            el.innerText?.toLowerCase().includes(pin.board.toLowerCase()),
+          );
+        }
+
+        for (const opt of boardOptions) {
+          if (opt.innerText?.toLowerCase().includes(pin.board.toLowerCase())) {
+            console.log(`Found matching board row, clicking...`);
+            await humanClick(opt);
+            found = true;
+            break;
+          }
+        }
+
+        if (!found && boardOptions.length > 0) {
+          await humanClick(boardOptions[0]);
+          found = true;
+        }
+
+        if (!found) {
+          console.log(
+            `Board "${pin.board}" not found in list. Looking for "Create board" option...`,
+          );
+
+          await humanBehavior.wait(1000, 1500); // Wait for results to settle
+
+          // Try finding the create board button in the dropdown
+          let createBtn = document.querySelector(SELECTORS.createBoardBtn);
+          if (!createBtn) {
+            console.log(
+              "Create button via selector not found, searching by text...",
+            );
+            createBtn = Array.from(
+              document.querySelectorAll('div, button, [role="button"]'),
+            ).find(
+              (el) =>
+                (el.innerText?.toLowerCase().includes("create board") ||
+                  el.title?.toLowerCase().includes("create board") ||
+                  el
+                    .getAttribute("aria-label")
+                    ?.toLowerCase()
+                    .includes("create board")) &&
+                el.getBoundingClientRect().height > 0, // Must be visible
+            );
+          }
+
+          if (createBtn) {
+            console.log(
+              "Found 'Create board' button, identifying best click target...",
+            );
+
+            // Find the actual button part if it's a wrapper, or click the whole thing if it is a button
+            const actualBtn =
+              createBtn.querySelector('[role="button"]') ||
+              createBtn.closest('[role="button"]') ||
+              createBtn;
+
+            console.log(
+              "Found best click target:",
+              actualBtn.tagName,
+              actualBtn.className,
+            );
+            await humanClick(actualBtn);
+            await humanBehavior.wait(2000, 3000);
+
+            // Check if a modal or confirm button appeared
+            console.log("Waiting for Create Board modal...");
+            let modal = null;
+            try {
+              modal = await waitForElement(SELECTORS.createBoardModal, 5000);
+            } catch (e) {
+              console.log(
+                "Modal did not appear within 5s, checking if board was auto-created...",
+              );
+            }
+
+            if (modal) {
+              console.log("Create board modal detected. Submitting...");
+              const submitBtn =
+                modal.querySelector(SELECTORS.createBoardSubmitBtn) ||
+                document.querySelector(SELECTORS.createBoardSubmitBtn);
+
+              if (submitBtn) {
+                console.log("Found submit button, clicking...");
+                await humanClick(submitBtn);
+                await humanBehavior.wait(3000, 5000);
+
+                // Final verification: did the dropdown close / board select?
+                await humanBehavior.wait(1000, 2000);
+                found = true;
+                console.log(`Board "${pin.board}" creation submitted.`);
+              } else {
+                console.warn("Found modal but no submit button.");
+                scoutDOM();
+              }
+            } else {
+              // Sometimes it just creates it if the name is already in the search field
+              console.log(
+                "No modal detected, checking if board was selected anyway...",
+              );
+              await humanBehavior.wait(2000, 2000);
+              const currentText = document
+                .querySelector(SELECTORS.boardDropdown)
+                ?.innerText?.toLowerCase();
+              if (
+                currentText &&
+                currentText.includes(pin.board.toLowerCase())
+              ) {
+                console.log(
+                  "Board selected successfully (no modal was needed).",
+                );
+                found = true;
+              }
+            }
+          }
+        }
       }
 
       if (!found) {
         scoutDOM();
-        throw new Error(`Could not find board: ${pin.board}.`);
+        throw new Error(`Could not find or create board: ${pin.board}.`);
       }
     }
 
